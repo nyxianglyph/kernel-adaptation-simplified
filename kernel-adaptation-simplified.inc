@@ -170,6 +170,8 @@ fi
 %if %{build_modules}
 mkdir -p %{buildroot}/lib/modules
 make -C %{source_directory} O=out %{?makeopts} INSTALL_MOD_STRIP=1 modules_install INSTALL_MOD_PATH=%{buildroot}
+# build/source point into the build host tree, useless on the device
+rm -f %{buildroot}/lib/modules/*/build %{buildroot}/lib/modules/*/source
 %endif
 
 echo "***** Building Boot Image *****"
