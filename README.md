@@ -61,6 +61,7 @@ Optional (with defaults):
     deviceinfo_kernel_disable_modules  skip modules in the vendor ramdisk
     deviceinfo_flash_offset_second  defaults to 0x00000000
     deviceinfo_bootimg_partition_size  adds the avb hash footer when set
+    deviceinfo_bootimg_avb_props    key:value props for the boot/init_boot avb footers, %%PART%% = partition
     deviceinfo_bootimg_append_vbmeta   defaults to false, appends ./vbmeta.img
     deviceinfo_append_dtb           true appends the dtb to the kernel image (header 0/1)
     deviceinfo_bootimg_prebuilt_dtb dtb file in the device repo used instead of deviceinfo_dtb

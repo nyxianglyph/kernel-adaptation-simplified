@@ -237,8 +237,13 @@ if [ "%{deviceinfo_bootimg_header_version}" -le 2 ]; then
     python3 $MKBOOTIMG_PATH/mkbootimg.py --kernel "$KERNEL" --ramdisk "$RAMDISK" --cmdline "%{deviceinfo_kernel_cmdline}" --header_version %{deviceinfo_bootimg_header_version} -o "$OUT" --os_version %{deviceinfo_bootimg_os_version} --os_patch_level %{deviceinfo_bootimg_os_patch_level} $EXTRA_ARGS
 else
 %if "%{?deviceinfo_bootimg_has_init_boot_partition}" == "true"
-    # Kernel-only boot.img, the ramdisk goes into init_boot.img
-    python3 $MKBOOTIMG_PATH/mkbootimg.py --kernel "$KERNEL" --header_version %{deviceinfo_bootimg_header_version} -o "$OUT" --os_version %{deviceinfo_bootimg_os_version} --os_patch_level %{deviceinfo_bootimg_os_patch_level} $EXTRA_ARGS
+    # Kernel-only boot.img, the ramdisk goes into init_boot.img. Without a
+    # vendor_boot build the cmdline goes into boot.img; the bootloader
+    # appends the vendor_boot cmdline to it.
+%if ! 0%{?build_vendor_boot:1}
+    [ -n "%{?deviceinfo_kernel_cmdline}" ] && EXTRA_ARGS+=" --cmdline \"%{?deviceinfo_kernel_cmdline}\""
+%endif
+    eval python3 $MKBOOTIMG_PATH/mkbootimg.py --kernel "$KERNEL" --header_version %{deviceinfo_bootimg_header_version} -o "$OUT" --os_version %{deviceinfo_bootimg_os_version} --os_patch_level %{deviceinfo_bootimg_os_patch_level} $EXTRA_ARGS
 
     INIT_BOOT=%{source_directory}/out/arch/%{kernel_arch}/boot/init_boot.img
     python3 $MKBOOTIMG_PATH/mkbootimg.py --ramdisk "$RAMDISK" --header_version %{deviceinfo_bootimg_header_version} -o "$INIT_BOOT"
@@ -272,10 +277,19 @@ else
     %endif
 fi
 
+# deviceinfo_bootimg_avb_props: space separated key:value props for the AVB
+# hash footers; %%PART%% in a key is replaced by boot / init_boot. Some
+# bootloaders take os_version/security_patch for the TEE from there.
+avb_props() {
+    for prop in %{?deviceinfo_bootimg_avb_props}; do
+        printf ' --prop %s' "$(echo "$prop" | sed "s/%%PART%%/$1/g")"
+    done
+}
+
 #Use AVB Tool to create final boot.img
 if [ -n "%{?deviceinfo_bootimg_partition_size}" ]; then
-    EXTRA_ARGS=""
-    [ -f "./rsa4096_boot.pem" ] && EXTRA_ARGS=" --key ./rsa4096_boot.pem --algorithm SHA256_RSA4096"
+    EXTRA_ARGS="$(avb_props boot)"
+    [ -f "./rsa4096_boot.pem" ] && EXTRA_ARGS+=" --key ./rsa4096_boot.pem --algorithm SHA256_RSA4096"
     $AVBTOOL add_hash_footer --image "$OUT" --partition_name boot --partition_size %{deviceinfo_bootimg_partition_size} $EXTRA_ARGS
 
     if [ -n "%{deviceinfo_bootimg_append_vbmeta}" ] && %{deviceinfo_bootimg_append_vbmeta}; then
@@ -284,7 +298,7 @@ if [ -n "%{?deviceinfo_bootimg_partition_size}" ]; then
 fi
 
 %if "%{?deviceinfo_bootimg_has_init_boot_partition}" == "true"
-$AVBTOOL add_hash_footer --image "$INIT_BOOT" --partition_name init_boot --partition_size %{?deviceinfo_init_boot_partition_size}%{!?deviceinfo_init_boot_partition_size:8388608}
+$AVBTOOL add_hash_footer --image "$INIT_BOOT" --partition_name init_boot --partition_size %{?deviceinfo_init_boot_partition_size}%{!?deviceinfo_init_boot_partition_size:8388608} $(avb_props init_boot)
 cp "$INIT_BOOT" %{buildroot}/boot/
 %endif
 
